@@ -1,0 +1,15 @@
+import tkinter as tk
+from model import House
+from controller import HouseController
+from view import HouseWindowedView
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    root.title("Exam task 6")
+    house = House()
+    view = HouseWindowedView(root, None)
+    controller = HouseController(house, view)
+    view.controller = controller
+    view.create_gui()
+    view.update(house.apartments)
+    root.mainloop()
