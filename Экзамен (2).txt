@@ -1,0 +1,222 @@
+import json
+import tkinter as tk
+from tkinter import messagebox
+from datetime import datetime
+
+
+class Expense:
+    """Класс для хранения информации о расходе"""
+
+    def __init__(self, name, amount, date, category):
+        if amount <= 0:
+            raise ValueError("Сумма расхода должна быть положительной!")
+        self.name = name
+        self.amount = amount
+        self.date = date
+        self.category = category
+
+    def to_dict(self):
+        """Конвертация объекта в словарь для сохранения в файл"""
+        return {"name": self.name, "amount": self.amount, "date": self.date, "category": self.category}
+
+
+class FileStorage:
+    """Класс для работы с файлом JSON"""
+
+    def __init__(self, filename="expenses.json"):
+        self.filename = filename
+
+    def save(self, data):
+        """Сохранение данных в JSON"""
+        with open(self.filename, "w", encoding="utf-8") as file:
+            json.dump(data, file, ensure_ascii=False, indent=4)
+
+    def load(self):
+        """Загрузка данных из JSON"""
+        try:
+            with open(self.filename, "r", encoding="utf-8") as file:
+                return json.load(file)
+        except (FileNotFoundError, json.JSONDecodeError):
+            return {"categories": [], "expenses": []}
+
+
+class ExpenseManager:
+    """Класс для управления расходами"""
+
+    def __init__(self, storage):
+        self.storage = storage
+        data = self.storage.load()
+        self.categories = data["categories"]
+        self.expenses = [Expense(**exp) for exp in data["expenses"]]
+
+    def add_category(self, category):
+        """Добавление категории"""
+        if category in self.categories:
+            return False, f"Категория '{category}' уже существует."
+        self.categories.append(category)
+        self.save_data()
+        return True, f"Категория '{category}' добавлена."
+
+    def remove_category(self, category):
+        """Удаление категории и всех связанных расходов"""
+        if category not in self.categories:
+            return False, f"Категория '{category}' не найдена."
+
+        self.categories.remove(category)
+        self.expenses = [exp for exp in self.expenses if exp.category != category]
+        self.save_data()
+        return True, f"Категория '{category}' и связанные с ней расходы удалены."
+
+    def add_expense(self, name, amount, date, category):
+        """Добавление расхода"""
+        try:
+            amount = float(amount)
+            if category not in self.categories:
+                return False, f"Ошибка: категории '{category}' не существует!"
+
+            expense = Expense(name, amount, date, category)
+            self.expenses.append(expense)
+            self.save_data()
+            return True, f"Расход '{name}' на сумму {amount} тенге добавлен."
+        except ValueError as e:
+            return False, str(e)
+
+    def save_data(self):
+        """Сохранение данных"""
+        data = {
+            "categories": self.categories,
+            "expenses": [exp.to_dict() for exp in self.expenses]
+        }
+        self.storage.save(data)
+
+    def get_expenses(self):
+        """Получение списка расходов"""
+        return [exp.to_dict() for exp in self.expenses]
+
+    def get_max_expense(self):
+        """Поиск максимального расхода"""
+        if not self.expenses:
+            return None
+        return max(self.expenses, key=lambda x: x.amount).to_dict()
+
+    def get_min_expense(self):
+        """Поиск минимального расхода"""
+        if not self.expenses:
+            return None
+        return min(self.expenses, key=lambda x: x.amount).to_dict()
+
+
+class ExpenseApp:
+    def __init__(self, root):
+        self.manager = ExpenseManager(FileStorage())
+
+        root.title("Учёт расходов")
+        root.geometry("400x600")
+
+        tk.Label(root, text="Учёт расходов", font=("Arial", 16, "bold")).pack(pady=10)
+
+        tk.Label(root, text="Добавить категорию:").pack()
+        self.category_entry = tk.Entry(root)
+        self.category_entry.pack()
+        tk.Button(root, text="Добавить", command=self.add_category).pack(pady=5)
+
+        tk.Label(root, text="Удалить категорию:").pack()
+        self.delete_category_entry = tk.Entry(root)
+        self.delete_category_entry.pack()
+        tk.Button(root, text="Удалить", command=self.remove_category).pack(pady=5)
+
+        tk.Label(root, text="Название расхода:").pack()
+        self.expense_name = tk.Entry(root)
+        self.expense_name.pack()
+
+        tk.Label(root, text="Сумма расхода (тенге):").pack()
+        self.expense_amount = tk.Entry(root)
+        self.expense_amount.pack()
+
+        tk.Label(root, text="Дата расхода (формат: Год-Месяц-День):").pack()
+        self.expense_date = tk.Entry(root)
+        self.expense_date.insert(0, datetime.today().strftime("%Y-%m-%d"))
+        self.expense_date.pack()
+
+        tk.Label(root, text="Категория расхода:").pack()
+        self.expense_category = tk.Entry(root)
+        self.expense_category.pack()
+
+        tk.Button(root, text="Добавить расход", command=self.add_expense).pack(pady=5)
+        tk.Button(root, text="Показать все расходы", command=self.show_expenses).pack(pady=5)
+        tk.Button(root, text="Максимальный расход", command=self.show_max_expense).pack(pady=5)
+        tk.Button(root, text="Минимальный расход", command=self.show_min_expense).pack(pady=5)
+
+    def add_category(self):
+        """Добавление новой категории"""
+        category = self.category_entry.get().strip()
+        if category:
+            success, message = self.manager.add_category(category)
+            messagebox.showinfo("Результат", message)
+        else:
+            messagebox.showerror("Ошибка", "Введите название категории!")
+
+    def remove_category(self):
+        """Удаление категории"""
+        category = self.delete_category_entry.get().strip()
+        if category:
+            success, message = self.manager.remove_category(category)
+            if success:
+                messagebox.showinfo("Успех", message)
+            else:
+                messagebox.showerror("Ошибка", message)
+        else:
+            messagebox.showerror("Ошибка", "Введите название категории!")
+
+    def add_expense(self):
+        """Добавление нового расхода"""
+        name = self.expense_name.get().strip()
+        amount = self.expense_amount.get().strip()
+        date = self.expense_date.get().strip()
+        category = self.expense_category.get().strip()
+
+        if not name or not amount or not date or not category:
+            messagebox.showerror("Ошибка", "Все поля должны быть заполнены!")
+            return
+
+        success, message = self.manager.add_expense(name, amount, date, category)
+        if success:
+            messagebox.showinfo("Успех", message)
+        else:
+            messagebox.showerror("Ошибка", message)
+
+    def show_expenses(self):
+        """Вывод всех расходов"""
+        expenses = self.manager.get_expenses()
+        if not expenses:
+            messagebox.showinfo("Расходы", "Нет сохранённых расходов.")
+            return
+
+        expense_text = "\n".join(
+            [f"{exp['date']} | {exp['name']} - {exp['amount']} тенге ({exp['category']})" for exp in expenses]
+        )
+        messagebox.showinfo("Расходы", expense_text)
+
+    def show_max_expense(self):
+        """Вывод самого большого расхода"""
+        max_expense = self.manager.get_max_expense()
+        if max_expense:
+            messagebox.showinfo("Максимальный расход",
+                                f"{max_expense['date']} | {max_expense['name']} - {max_expense['amount']} тенге ({max_expense['category']})")
+        else:
+            messagebox.showinfo("Максимальный расход", "Нет данных.")
+
+    def show_min_expense(self):
+        """Вывод самого маленького расхода"""
+        min_expense = self.manager.get_min_expense()
+        if min_expense:
+            messagebox.showinfo("Минимальный расход",
+                                f"{min_expense['date']} | {min_expense['name']} - {min_expense['amount']} тенге ({min_expense['category']})")
+        else:
+            messagebox.showinfo("Минимальный расход", "Нет данных.")
+
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = ExpenseApp(root)
+    root.mainloop()
